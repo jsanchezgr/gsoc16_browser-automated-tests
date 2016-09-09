@@ -1,19 +1,34 @@
 <?php
 /**
+ * @package     Joomla.Site
+ * @subpackage  RoboFile
+ *
+ * @copyright   Copyright (C) 2005 - 2016 Open Source Matters, Inc. All rights reserved.
+ * @license     GNU General Public License version 2 or later; see LICENSE.txt
+ */
+
+/**
  * This is joomla project's console command file for Robo.li task runner.
  *
  * Download robo.phar from http://robo.li/robo.phar and type in the root of the repo: $ php robo.phar
  * Or do: $ composer update, and afterwards you will be able to execute robo like $ php libraries/vendor/bin/robo
  *
- * @see http://robo.li/
+ * @see         http://robo.li/
  */
-require_once __DIR__ . '/tests/vendor/autoload.php';
+require_once __DIR__ . '/tests/codeception/vendor/autoload.php';
 
 if (!defined('JPATH_BASE'))
 {
 	define('JPATH_BASE', __DIR__);
 }
 
+/**
+ * Modern php task runner for Joomla! Browser Automated Tests execution
+ *
+ * @package  RoboFile
+ *
+ * @since    __DEPLOY_VERSION__
+ */
 class RoboFile extends \Robo\Tasks
 {
 	// Load tasks from composer, see composer.json
@@ -21,27 +36,39 @@ class RoboFile extends \Robo\Tasks
 	use \Joomla\Jorobo\Tasks\loadTasks;
 
 	/**
+	 * Path to the codeception tests folder
+	 *
+	 * @var   string
+	 */
+	private $testsPath = 'tests/codeception/';
+
+	/**
 	 * Local configuration parameters
 	 *
-	 * @var array
+	 * @var    array
+	 * @since  __DEPLOY_VERSION__
 	 */
 	private $configuration = array();
 
 	/**
 	 * Path to the local CMS test folder
 	 *
-	 * @var string
+	 * @var    string
+	 * @since  __DEPLOY_VERSION__
 	 */
 	protected $cmsPath = null;
 
 	/**
-	 * Constructor
+	 * RoboFile constructor.
+	 *
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  void
 	 */
 	public function __construct()
 	{
 		$this->configuration = $this->getConfiguration();
-
-		$this->cmsPath = $this->getTestingPath();
+		$this->cmsPath       = $this->getTestingPath();
 
 		// Set default timezone (so no warnings are generated if it is not set)
 		date_default_timezone_set('UTC');
@@ -50,7 +77,9 @@ class RoboFile extends \Robo\Tasks
 	/**
 	 * Get (optional) configuration from an external file
 	 *
-	 * @return \stdClass|null
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  \stdClass|null
 	 */
 	public function getConfiguration()
 	{
@@ -78,20 +107,22 @@ class RoboFile extends \Robo\Tasks
 	/**
 	 * Get the correct CMS root path
 	 *
-	 * @return string
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  string
 	 */
 	private function getTestingPath()
 	{
 		if (empty($this->configuration->cmsPath))
 		{
-			return 'tests/joomla-cms3';
+			return $this->testsPath . 'joomla-cms3';
 		}
 
 		if (!file_exists(dirname($this->configuration->cmsPath)))
 		{
-			$this->say("Cms path written in local configuration does not exists or is not readable");
+			$this->say("CMS path written in local configuration does not exists or is not readable");
 
-			return 'tests/joomla-cms3';
+			return $this->testsPath . 'joomla-cms3';
 		}
 
 		return $this->configuration->cmsPath;
@@ -100,7 +131,9 @@ class RoboFile extends \Robo\Tasks
 	/**
 	 * Build the Joomla CMS
 	 *
-	 * @return  bool
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  bool  This is allways true
 	 */
 	public function build()
 	{
@@ -110,9 +143,13 @@ class RoboFile extends \Robo\Tasks
 	/**
 	 * Creates a testing Joomla site for running the tests (use it before run:test)
 	 *
-	 * @param   bool  $use_htaccess  (1/0) Rename and enable embedded Joomla .htaccess file
+	 * @param   bool  $useHtaccess  (1/0) Rename and enable embedded Joomla .htaccess file
+	 *
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  void
 	 */
-	public function createTestingSite($use_htaccess = false)
+	public function createTestingSite($useHtaccess = false)
 	{
 		// Clean old testing site
 		if (is_dir($this->cmsPath))
@@ -124,14 +161,15 @@ class RoboFile extends \Robo\Tasks
 			catch (Exception $e)
 			{
 				// Sorry, we tried :(
-				$this->say('Sorry, you will have to delete ' . $this->cmsPath . ' manually. ');
+				$this->say('Sorry, you will have to delete ' . $this->cmsPath . ' manually.');
+
 				exit(1);
 			}
 		}
 
 		$this->build();
 
-		$exclude = ["tests"];
+		$exclude = ['tests', 'tests-phpunit', '.run', '.github', '.git'];
 
 		$this->copyJoomla($this->cmsPath, $exclude);
 
@@ -142,21 +180,27 @@ class RoboFile extends \Robo\Tasks
 		}
 
 		// Optionally uses Joomla default htaccess file. Used by TravisCI
-		if ($use_htaccess == true)
+		if ($useHtaccess == true)
 		{
 			$this->say("Renaming htaccess.txt to .htaccess");
 			$this->_copy('./htaccess.txt', $this->cmsPath . '/.htaccess');
-			$this->_exec('sed -e "s,# RewriteBase /,RewriteBase /tests/joomla-cms3/,g" -in-place tests/joomla-cms3/.htaccess');
+			$this->_exec('sed -e "s,# RewriteBase /,RewriteBase /tests/codeception/joomla-cms3/,g" -in-place tests/codeception/joomla-cms3/.htaccess');
 		}
+
+		$this->taskExec('curl -I http://localhost/tests/joomla-cms3/')->printed(true)->run();
 	}
 
 	/**
 	 * Copy the joomla installation excluding folders
 	 *
-	 * @param   string  $dst       Target folder
-	 * @param   array   $exclude   Exclude list of folders
+	 * @param   string  $dst      Target folder
+	 * @param   array   $exclude  Exclude list of folders
 	 *
 	 * @throws  Exception
+	 *
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  void
 	 */
 	protected function copyJoomla($dst, $exclude = array())
 	{
@@ -201,31 +245,35 @@ class RoboFile extends \Robo\Tasks
 	/**
 	 * Downloads Composer
 	 *
-	 * @return void
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  void
 	 */
 	private function getComposer()
 	{
 		// Make sure we have Composer
-		if (!file_exists('./tests/composer.phar'))
+		if (!file_exists($this->testsPath . 'composer.phar'))
 		{
-			$this->_exec('curl -o tests/composer.phar  --retry 3 --retry-delay 5 -sS https://getcomposer.org/installer | php');
+			$this->_exec('curl -o ' . $this->testsPath . 'composer.phar  --retry 3 --retry-delay 5 -sS https://getcomposer.org/installer | php');
 		}
 	}
 
 	/**
 	 * Runs Selenium Standalone Server.
 	 *
-	 * @return void
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  void
 	 */
 	public function runSelenium()
 	{
 		if (strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN')
 		{
-			$this->_exec("tests/vendor/bin/selenium-server-standalone >> selenium.log 2>&1 &");
+			$this->_exec($this->testsPath . "vendor/bin/selenium-server-standalone >> selenium.log 2>&1 &");
 		}
 		else
 		{
-			$this->_exec("START java.exe -jar .\\tests\\vendor\\joomla-projects\\selenium-server-standalone\\bin\\selenium-server-standalone.jar");
+			$this->_exec("START java.exe -jar .\\tests\\codeception\\vendor\\joomla-projects\\selenium-server-standalone\\bin\\selenium-server-standalone.jar");
 		}
 
 		if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN')
@@ -243,10 +291,13 @@ class RoboFile extends \Robo\Tasks
 	/**
 	 * Executes all the Selenium System Tests in a suite on your machine
 	 *
-	 * @param   array $opts Array of configuration options:
-	 *          - 'use-htaccess': renames and enable embedded Joomla .htaccess file
-	 *          - 'env': set a specific environment to get configuration from
-	 * @return mixed
+	 * @param   array  $opts  Array of configuration options:
+	 *                        - 'use-htaccess': renames and enable embedded Joomla .htaccess file
+	 *                        - 'env': set a specific environment to get configuration from
+	 *
+	 * @since   __DEPLOY_VERSION__
+	 *
+	 * @return  mixed
 	 */
 	public function runTests($opts = ['use-htaccess' => false, 'env' => 'desktop'])
 	{
@@ -255,21 +306,21 @@ class RoboFile extends \Robo\Tasks
 		$this->createTestingSite($opts['use-htaccess']);
 
 		$this->getComposer();
-		$this->taskComposerInstall('tests/composer.phar')->run();
+		$this->taskComposerInstall($this->testsPath . 'composer.phar')->run();
 
 		$this->runSelenium();
 
 		// Make sure to run the build command to generate AcceptanceTester
-		$this->_exec('php tests/vendor/bin/codecept build');
+		$this->_exec('php ' . $this->testsPath . 'vendor/bin/codecept build');
 
-		$pathToCodeception = 'tests/vendor/bin/codecept';
+		$pathToCodeception = $this->testsPath . 'vendor/bin/codecept';
 
 		$this->taskCodecept($pathToCodeception)
 			->arg('--steps')
 			->arg('--debug')
 			->arg('--fail-fast')
 			->arg('--env ' . $opts['env'])
-			->arg('tests/acceptance/install/')
+			->arg($this->testsPath . 'acceptance/install/')
 			->run()
 			->stopOnFail();
 
@@ -278,7 +329,7 @@ class RoboFile extends \Robo\Tasks
 			->arg('--debug')
 			->arg('--fail-fast')
 			->arg('--env ' . $opts['env'])
-			->arg('tests/acceptance/administrator/')
+			->arg($this->testsPath . 'acceptance/content.feature')
 			->run()
 			->stopOnFail();
 
@@ -287,14 +338,52 @@ class RoboFile extends \Robo\Tasks
 			->arg('--debug')
 			->arg('--fail-fast')
 			->arg('--env ' . $opts['env'])
-			->arg('tests/acceptance/frontend/')
+			->arg($this->testsPath . 'acceptance/users.feature')
+			->run()
+			->stopOnFail();
+
+		$this->taskCodecept($pathToCodeception)
+			->arg('--steps')
+			->arg('--debug')
+			->arg('--fail-fast')
+			->arg('--env ' . $opts['env'])
+			->arg($this->testsPath . 'acceptance/users_frontend.feature')
+			->run()
+			->stopOnFail();
+
+		$this->taskCodecept($pathToCodeception)
+			->arg('--steps')
+			->arg('--debug')
+			->arg('--fail-fast')
+			->arg('--env ' . $opts['env'])
+			->arg($this->testsPath . 'acceptance/category.feature')
+			->run()
+			->stopOnFail();
+
+		$this->taskCodecept($pathToCodeception)
+			->arg('--steps')
+			->arg('--debug')
+			->arg('--fail-fast')
+			->arg('--env ' . $opts['env'])
+			->arg($this->testsPath . 'acceptance/administrator/')
+			->run()
+			->stopOnFail();
+
+		$this->taskCodecept($pathToCodeception)
+			->arg('--steps')
+			->arg('--debug')
+			->arg('--fail-fast')
+			->arg('--env ' . $opts['env'])
+			->arg($this->testsPath . 'acceptance/frontend/')
 			->run()
 			->stopOnFail();
 
 		/*
 		// Uncomment this lines if you need to debug selenium errors
 		$seleniumErrors = file_get_contents('selenium.log');
-		if ($seleniumErrors) {
+
+		if ($seleniumErrors)
+		{
 			$this->say('Printing Selenium Log files');
 			$this->say('------ selenium.log (start) ---------');
 			$this->say($seleniumErrors);
@@ -303,12 +392,13 @@ class RoboFile extends \Robo\Tasks
 		*/
 	}
 
-
 	/**
 	 * Executes a specific Selenium System Tests in your machine
 	 *
 	 * @param   string  $pathToTestFile  Optional name of the test to be run
 	 * @param   string  $suite           Optional name of the suite containing the tests, Acceptance by default.
+	 *
+	 * @since   __DEPLOY_VERSION__
 	 *
 	 * @return  mixed
 	 */
@@ -317,7 +407,7 @@ class RoboFile extends \Robo\Tasks
 		$this->runSelenium();
 
 		// Make sure to run the build command to generate AcceptanceTester
-		$this->_exec('php tests/vendor/bin/codecept build');
+		$this->_exec('php tests/codeception/vendor/bin/codecept build');
 
 		if (!$pathToTestFile)
 		{
@@ -325,22 +415,25 @@ class RoboFile extends \Robo\Tasks
 
 			$iterator = new RecursiveIteratorIterator(
 				new RecursiveDirectoryIterator(
-					'tests/' . $suite,
+					$this->testsPath . $suite,
 					RecursiveDirectoryIterator::SKIP_DOTS
 				),
 				RecursiveIteratorIterator::SELF_FIRST
 			);
 
 			$tests = array();
+			$i     = 1;
+
 			$iterator->rewind();
-			$i = 1;
 
 			while ($iterator->valid())
 			{
 				if (strripos($iterator->getSubPathName(), 'cept.php')
-					|| strripos($iterator->getSubPathName(), 'cest.php'))
+					|| strripos($iterator->getSubPathName(), 'cest.php')
+					|| strripos($iterator->getSubPathName(), '.feature'))
 				{
 					$this->say('[' . $i . '] ' . $iterator->getSubPathName());
+
 					$tests[$i] = $iterator->getSubPathName();
 					$i++;
 				}
@@ -349,52 +442,57 @@ class RoboFile extends \Robo\Tasks
 			}
 
 			$this->say('');
-			$testNumber	= $this->ask('Type the number of the test  in the list that you want to run...');
-			$test = $tests[$testNumber];
+			$testNumber = $this->ask('Type the number of the test in the list that you want to run...');
+			$test       = $tests[$testNumber];
 		}
 
-		$pathToTestFile = 'tests/' . $suite . '/' . $test;
+		$pathToTestFile = $this->testsPath . $suite . '/' . $test;
 
-		//loading the class to display the methods in the class
-		require 'tests/' . $suite . '/' . $test;
+		// Loading the class to display the methods in the class
 
-		//logic to fetch the class name from the file name
+		// Logic to fetch the class name from the file name
 		$fileName = explode("/", $test);
-		$className = explode(".", $fileName[1]);
 
-		//if the selected file is cest only than we will give the option to execute individual methods, we don't need this in cept file
+		// If the selected file is cest only then we will give the option to execute individual methods, we don't need this in cept or feature files
 		$i = 1;
 
-		if (strripos($className[0], 'cest'))
+		if (isset($fileName[1]) && strripos($fileName[1], 'cest'))
 		{
+			require $this->testsPath . $suite . '/' . $test;
+
+			$className     = explode(".", $fileName[1]);
 			$class_methods = get_class_methods($className[0]);
+
 			$this->say('[' . $i . '] ' . 'All');
+
 			$methods[$i] = 'All';
 			$i++;
+
 			foreach ($class_methods as $method_name)
 			{
 				$reflect = new ReflectionMethod($className[0], $method_name);
-				if(!$reflect->isConstructor())
+
+				if (!$reflect->isConstructor() && $reflect->isPublic())
 				{
-					if ($reflect->isPublic())
-					{
-						$this->say('[' . $i . '] ' . $method_name);
-						$methods[$i] = $method_name;
-						$i++;
-					}
+					$this->say('[' . $i . '] ' . $method_name);
+
+					$methods[$i] = $method_name;
+
+					$i++;
 				}
 			}
+
 			$this->say('');
 			$methodNumber = $this->ask('Please choose the method in the test that you would want to run...');
-			$method = $methods[$methodNumber];
+			$method       = $methods[$methodNumber];
 		}
 
-		if(isset($method) && $method != 'All')
+		if (isset($method) && $method != 'All')
 		{
 			$pathToTestFile = $pathToTestFile . ':' . $method;
 		}
 
-		$this->taskCodecept('tests/vendor/bin/codecept')
+		$this->taskCodecept($this->testsPath . 'vendor/bin/codecept')
 			->test($pathToTestFile)
 			->arg('--steps')
 			->arg('--debug')
